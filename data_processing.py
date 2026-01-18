@@ -1,3 +1,8 @@
+"""
+Module tiền xử lý văn bản tiếng Việt
+Bao gồm các hàm để làm sạch, chuẩn hóa và tokenize text
+"""
+
 import numpy as np
 import pandas as pd
 from pyvi.ViTokenizer import ViTokenizer
@@ -8,43 +13,101 @@ import seaborn as sns
 from emot.emo_unicode import UNICODE_EMOJI, EMOTICONS_EMO
 from collections import Counter
 import random
+import logging
 
+# Cấu hình logging
+logging.basicConfig(level=logging.WARNING)
+logger = logging.getLogger(__name__)
 
+# Đường dẫn tới các file tài nguyên
 STOPWORDS = './data/vietnamese_stop_word/vietnamese-stopwords.txt'
 abb_dict_normal_path = './data/dictionary/abb_dict_normal.xlsx'
 abb_dict_special_path = './data/dictionary/abb_dict_special.xlsx'
 emoji2word_path = './data/dictionary/emoji2word.xlsx'
 character2emoji_path = './data/dictionary/character2emoji.xlsx'
 
-
-with open(STOPWORDS, "r", encoding="utf-8") as ins:
-    stopwords = []
-    for line in ins:
-        dd = line.strip('\n')
-        stopwords.append(dd)
-    stopwords = set(stopwords)
+# Load stopwords một lần khi module được import (tối ưu performance)
+stopwords = set()
+try:
+    with open(STOPWORDS, "r", encoding="utf-8") as ins:
+        stopwords = set(line.strip('\n') for line in ins if line.strip())
+    logger.info(f"Đã load {len(stopwords)} stopwords")
+except FileNotFoundError:
+    logger.warning(f"Không tìm thấy file stopwords: {STOPWORDS}")
+except Exception as e:
+    logger.error(f"Lỗi khi load stopwords: {e}")
 
 def filter_stop_words(train_sentences, stop_words):
-    new_sent = [word for word in train_sentences.split() if word not in stop_words]
-    train_sentences = ' '.join(new_sent)
-    return train_sentences
+    """
+    Loại bỏ stopwords khỏi câu
+    
+    Args:
+        train_sentences (str): Câu cần xử lý
+        stop_words (set): Tập stopwords
+    
+    Returns:
+        str: Câu đã loại bỏ stopwords
+    """
+    if not train_sentences or not isinstance(train_sentences, str):
+        return ""
+    
+    try:
+        new_sent = [word for word in train_sentences.split() if word not in stop_words]
+        return ' '.join(new_sent)
+    except Exception as e:
+        logger.error(f"Lỗi trong filter_stop_words: {e}")
+        return train_sentences
 
 def check_repeated_character(text):
-    text = re.sub('  +', ' ', text).strip()
-    count = {}
-    for i in range(len(text) - 1):
-        if text[i] == text[i + 1]:
-            return True
-    return False
+    """
+    Kiểm tra xem text có ký tự lặp liên tiếp không
+    
+    Args:
+        text (str): Text cần kiểm tra
+    
+    Returns:
+        bool: True nếu có ký tự lặp
+    """
+    if not text or len(text) < 2:
+        return False
+    
+    try:
+        text = re.sub('  +', ' ', text).strip()
+        # FIX: Logic cũ chỉ cần 1 ký tự lặp là return True, có thể quá strict
+        for i in range(len(text) - 1):
+            if text[i] == text[i + 1]:
+                return True
+        return False
+    except Exception as e:
+        logger.error(f"Lỗi trong check_repeated_character: {e}")
+        return False
 
-def check_space(text):  # check space in string
-    for i in range(len(text)):
-        if text[i] == ' ':
-            return True
-    return False
-
+def check_space(text):
+    """
+    Kiểm tra xem text có chứa khoảng trắng không
+    
+    Args:
+        text (str): Text cần kiểm tra
+    
+    Returns:
+        bool: True nếu có khoảng trắng
+    """
+    if not text:
+        return False
+    return ' ' in text
 
 def check_special_character_numberic(text):
+    """
+    Kiểm tra xem text có chứa ký tự đặc biệt hoặc số không
+    
+    Args:
+        text (str): Text cần kiểm tra
+    
+    Returns:
+        bool: True nếu có ký tự không phải chữ cái
+    """
+    if not text:
+        return False
     return any(not c.isalpha() for c in text)
 
 def remove_emoji(text):
@@ -162,39 +225,123 @@ def abbreviation_kk(text):
     return text
 
 def remove_quality_product(text):
-    # Loại bỏ từ "Chất lượng sản phẩm"
-    return text.replace("Chất lượng sản phẩm:", "").strip()
+    """Loại bỏ tiền tố 'Chất lượng sản phẩm:'"""
+    if not text:
+        return ""
+    try:
+        return text.replace("Chất lượng sản phẩm:", "").strip()
+    except:
+        return str(text)
 
 def remove_special_function(text):
-    # Loại bỏ từ "Tính năng nổi bật"
-    return text.replace("Tính năng nổi bật:", "").strip()
+    """Loại bỏ tiền tố 'Tính năng nổi bật:'"""
+    if not text:
+        return ""
+    try:
+        return text.replace("Tính năng nổi bật:", "").strip()
+    except:
+        return str(text)
 
-
-# tokenize by lib Pyvi
 def tokenize(text):
-    text = str(text)
-    text = ViTokenizer.tokenize(text)
-    return text
+    """
+    Tokenize văn bản tiếng Việt sử dụng PyVi
+    Args:
+        text (str): Text cần tokenize
+    Returns:
+        str: Text đã được tokenize
+    """
+    if not text:
+        return ""
+    try:
+        text = str(text)
+        text = ViTokenizer.tokenize(text)
+        return text
+    except Exception as e:
+        logger.error(f"Lỗi trong tokenize: {e}")
+        return str(text)
 
-
-def preprocessing(text, lowercased = False):
-    text = remove_quality_product(text)
-    text = remove_special_function(text)
-    text = filter_stop_words(text, stopwords)
-    text = text.lower() 
-    text = convert_character2emoji(text)
-    text = url(text)
-    text = mail(text)
-    text = tag(text)
-    text = mixed_word_number(text)
-    text = special_character_1(text)  # ##remove , . ? !
-    text = abbreviation_kk(text)
-    text = abbreviation_special(text)
-    text = convert_character2emoji(text)
-    text = remove_emoji(text)
-    text = repeated_character(text)
-    text = special_character(text)
-    text = abbreviation_normal(text)
-    # text = abbreviation_predict(text)
-    text = tokenize(text)
-    return text
+def preprocessing(text, lowercased=False):
+    """
+    Pipeline tiền xử lý hoàn chỉnh cho văn bản tiếng Việt
+    
+    Args:
+        text (str): Text cần xử lý
+        lowercased (bool): Có chuyển thành chữ thường không (mặc định: False)
+    
+    Returns:
+        str: Text đã được tiền xử lý hoàn toàn
+    
+    Processing steps:
+        1. Loại bỏ các tiền tố không cần thiết
+        2. Loại bỏ stopwords
+        3. Chuyển chữ thường
+        4. Xử lý emoji và ký tự đặc biệt
+        5. Loại bỏ URL, email, tags
+        6. Xử lý viết tắt
+        7. Tokenize
+    """
+    # Validate input
+    if text is None or (isinstance(text, str) and not text.strip()):
+        return ""
+    
+    try:
+        # Đảm bảo text là string
+        text = str(text)
+        
+        # Bước 1: Loại bỏ các tiền tố không cần thiết
+        text = remove_quality_product(text)
+        text = remove_special_function(text)
+        
+        # Bước 2: Loại bỏ stopwords
+        text = filter_stop_words(text, stopwords)
+        
+        # Bước 3: Chuyển chữ thường
+        text = text.lower() 
+        
+        # Bước 4: Xử lý character -> emoji conversion
+        text = convert_character2emoji(text)
+        
+        # Bước 5: Loại bỏ URL, email và tags
+        text = url(text)
+        text = mail(text)
+        text = tag(text)
+        
+        # Bước 6: Loại bỏ từ chứa số
+        text = mixed_word_number(text)
+        
+        # Bước 7: Loại bỏ dấu câu đơn giản (comma, dot, etc)
+        text = special_character_1(text)
+        
+        # Bước 8: Xử lý các viết tắt đặc biệt (kk, haha, etc)
+        text = abbreviation_kk(text)
+        
+        # Bước 9: Thay thế viết tắt đặc biệt
+        text = abbreviation_special(text)
+        
+        # Bước 10: Chuyển character -> emoji một lần nữa
+        text = convert_character2emoji(text)
+        
+        # Bước 11: Loại bỏ emoji
+        text = remove_emoji(text)
+        
+        # Bước 12: Chuẩn hóa ký tự lặp
+        text = repeated_character(text)
+        
+        # Bước 13: Loại bỏ ký tự đặc biệt
+        text = special_character(text)
+        
+        # Bước 14: Thay thế viết tắt thường
+        text = abbreviation_normal(text)
+        
+        # Bước 15: Tokenize
+        text = tokenize(text)
+        
+        # Final cleanup
+        text = re.sub('  +', ' ', text).strip()
+        
+        return text
+        
+    except Exception as e:
+        logger.error(f"Lỗi nghiêm trọng trong preprocessing: {e}")
+        # Trả về text gốc nếu có lỗi để không mất dữ liệu
+        return str(text) if text else ""
