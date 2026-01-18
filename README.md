@@ -9,7 +9,7 @@
 ### Cài đặt các gói cần thiết:
 1. Clone repository của dự án:
     ```bash
-    git clone https://github.com/KudoShiinichi/IE212.git
+    git clone https://github.com/tdminle/IE212.P11-BigData.git
     ```
 
 2. Cài đặt các gói yêu cầu:
